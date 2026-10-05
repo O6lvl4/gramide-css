@@ -1,0 +1,19 @@
+/* 日本語 and café: byte offsets after multibyte comments */
+:root {
+  --gap: 1.25rem;
+  --accent: oklch(70% .2 250);
+  --nested: { key: [1; 2]; };
+}
+.card, article > .card:hover {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap);
+  width: calc(100% - 2 * var(--gap));
+  background: url("images/日本語.svg");
+  color: var(--accent) !important;
+}
+input[type="text" i]:focus-visible::placeholder {
+  content: "literal } ] ) /* not a comment */";
+  opacity: .75;
+}
+.\31 0café { margin: -1.5rem 0; }

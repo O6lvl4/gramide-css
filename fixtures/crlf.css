@@ -1,0 +1,5 @@
+/* UTF-8 日本語 */
+.crlf {
+  content: "continued\
+text";
+}

@@ -1,0 +1,19 @@
+@charset "UTF-8";
+@import url("theme.css") layer(theme);
+@layer base, components;
+@font-face {
+  font-family: "Demo";
+  src: url("demo.woff2") format("woff2");
+  font-weight: 100 900;
+}
+@media screen and (min-width: 40rem) {
+  .grid { grid-template-columns: repeat(3, 1fr); }
+  @supports (display: grid) {
+    .grid { display: grid; }
+  }
+}
+@keyframes fade {
+  from { opacity: 0; }
+  50%, 75% { opacity: .5; }
+  to { opacity: 1; }
+}

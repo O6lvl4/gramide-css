@@ -1,0 +1,85 @@
+import gramide.parser
+import gramide.tree
+import gramide.tags
+import self.grammar
+import self.lexer
+import self.symbols
+import self.table
+
+test "components.css parses with identical generated and dynamic trees" {
+  let source = "/* 日本語 and café: byte offsets after multibyte comments */\n:root {\n  --gap: 1.25rem;\n  --accent: oklch(70% .2 250);\n  --nested: { key: [1; 2]; };\n}\n.card, article > .card:hover {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n  gap: var(--gap);\n  width: calc(100% - 2 * var(--gap));\n  background: url(\"images/日本語.svg\");\n  color: var(--accent) !important;\n}\ninput[type=\"text\" i]:focus-visible::placeholder {\n  content: \"literal } ] ) /* not a comment */\";\n  opacity: .75;\n}\n.\\31 0café { margin: -1.5rem 0; }\n"
+  let tokens = lexer.scan(source, false)!
+  let dynamic = parser.parse(grammar.rules(), bytes.from_string(source), tokens)!
+  let compiled = parser.parse_with(table.compiled(), bytes.from_string(source), tokens)!
+  assert_eq(tree.sexp(dynamic.root, dynamic.names), tree.sexp(compiled.root, compiled.names))
+  let rows = tags.of_tree(compiled.root, tokens, bytes.from_string(source), compiled.names, ".", symbols.symbol_rules())
+  assert(list.any(rows, (row) => row.name == ":root"))
+  assert(list.any(rows, (row) => row.name == "--gap"))
+  assert(list.any(rows, (row) => row.name == ".card,article>.card:hover"))
+  assert(list.any(rows, (row) => row.name == "input[type=\"text\"i]:focus-visible::placeholder"))
+}
+
+test "at_rules.css parses with identical generated and dynamic trees" {
+  let source = "@charset \"UTF-8\";\n@import url(\"theme.css\") layer(theme);\n@layer base, components;\n@font-face {\n  font-family: \"Demo\";\n  src: url(\"demo.woff2\") format(\"woff2\");\n  font-weight: 100 900;\n}\n@media screen and (min-width: 40rem) {\n  .grid { grid-template-columns: repeat(3, 1fr); }\n  @supports (display: grid) {\n    .grid { display: grid; }\n  }\n}\n@keyframes fade {\n  from { opacity: 0; }\n  50%, 75% { opacity: .5; }\n  to { opacity: 1; }\n}\n"
+  let tokens = lexer.scan(source, false)!
+  let dynamic = parser.parse(grammar.rules(), bytes.from_string(source), tokens)!
+  let compiled = parser.parse_with(table.compiled(), bytes.from_string(source), tokens)!
+  assert_eq(tree.sexp(dynamic.root, dynamic.names), tree.sexp(compiled.root, compiled.names))
+  let rows = tags.of_tree(compiled.root, tokens, bytes.from_string(source), compiled.names, ".", symbols.symbol_rules())
+  assert(list.any(rows, (row) => row.name == "@charset"))
+  assert(list.any(rows, (row) => row.name == "@media"))
+  assert(list.any(rows, (row) => row.name == "@keyframes"))
+  assert(list.any(rows, (row) => row.name == "from"))
+  assert(list.any(rows, (row) => row.name == "50%,75%"))
+  assert(list.any(rows, (row) => row.name == "to"))
+}
+
+test "nesting.css parses with identical generated and dynamic trees" {
+  let source = ".button {\n  color: black;\n  &:hover { color: rebeccapurple; }\n  > .icon { transform: translate(1px, 2px); }\n  @media (prefers-reduced-motion: reduce) {\n    transition: none;\n  }\n}\nsvg|a[href^=\"https\"] { fill: currentColor; }\n"
+  let tokens = lexer.scan(source, false)!
+  let dynamic = parser.parse(grammar.rules(), bytes.from_string(source), tokens)!
+  let compiled = parser.parse_with(table.compiled(), bytes.from_string(source), tokens)!
+  assert_eq(tree.sexp(dynamic.root, dynamic.names), tree.sexp(compiled.root, compiled.names))
+  let rows = tags.of_tree(compiled.root, tokens, bytes.from_string(source), compiled.names, ".", symbols.symbol_rules())
+  assert(list.any(rows, (row) => row.name == ".button"))
+  assert(list.any(rows, (row) => row.name == "&:hover"))
+  assert(list.any(rows, (row) => row.name == ">.icon"))
+  assert(list.any(rows, (row) => row.name == "@media"))
+}
+
+test "broken.css is not accepted by structural reading" {
+  assert(result.is_err(grammar.parse_src(".broken { color red; }\n")))
+}
+
+test "broken_nesting.css is not accepted by structural reading" {
+  assert(result.is_err(grammar.parse_src(".broken { width: calc(100% - 1rem; }\n")))
+}
+
+test "broken_comment.css is not accepted by structural reading" {
+  assert(result.is_err(grammar.parse_src("/* unclosed comment\n")))
+}
+
+test "broken_selector.css is not accepted by structural reading" {
+  assert(result.is_err(grammar.parse_src(".broken, { color: red }\n")))
+}
+
+test "outline recovery can find a following intact declaration" {
+  let source = ".broken { color red; } .saved { color: blue; }"
+  let tokens = lexer.scan(source, true)!
+  let parsed = parser.parse_recovering(table.compiled(), bytes.from_string(source), tokens)!
+  let rows = tags.of_tree(parsed.root, tokens, bytes.from_string(source), parsed.names, ".", symbols.symbol_rules())
+  assert(list.any(rows, (row) => row.name == ".saved"))
+  assert(result.is_err(grammar.parse_src(source)))
+}
+
+test "CRLF symbol coordinates stay inside original LF-counted source lines" {
+  let source = "/* UTF-8 日本語 */\r\n.crlf {\r\n  content: \"continued\\\r\ntext\";\r\n}\r\n"
+  let tokens = lexer.scan(source, false)!
+  let parsed = parser.parse_with(table.compiled(), bytes.from_string(source), tokens)!
+  let rows = tags.of_tree(parsed.root, tokens, bytes.from_string(source), parsed.names, ".", symbols.symbol_rules())
+  let lines = tags.line_count(bytes.from_string(source))
+  for row in rows { assert(row.line >= 1 and row.end_line >= row.line and row.end_line <= lines) }
+}
+test "lone CR source is explicitly unsupported in strict readers" {
+  assert(result.is_err(lexer.scan("/* UTF-8 日本語 */\r.crlf {\r  content: \"continued\\\rtext\";\r}\r", false)))
+}

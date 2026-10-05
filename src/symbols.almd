@@ -1,0 +1,7 @@
+import gramide.package_api
+fn symbol_rules() -> package_api.SymbolRules = package_api.SymbolRules {
+  declarations: [("style_rule", "rule"), ("declaration", "property"), ("at_rule", "at-rule")],
+  scopes: [], namespaces: [], callables: ["function_declaration"],
+  lexical_owners: false, envelopes: [], unnamed_envelopes: [],
+  arguments: "arguments", field_access: "field_access", type_mentions: []
+}

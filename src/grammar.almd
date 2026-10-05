@@ -1,0 +1,44 @@
+// A CSS structural reader: rules, declarations, selectors and nested
+// component values. Property and at-rule semantic validity is out of scope.
+import gramide.parser
+import gramide.parser.{ tok, lit, keep, r, seq, alt, rep, rep1, opt, wrap, field, ahead, lits, keeps, grammar, recover_all, nott }
+import self.lexer
+let ident = tok("identifier")
+fn comma(one: parser.Rule) -> parser.Rule = seq([one, rep(seq([lit(","), one]))])
+fn rules() -> parser.Grammar = grammar("stylesheet", [
+  ("stylesheet", wrap("stylesheet", rep(recover_all(alt([lits(["<!--", "-->"]), r("at_rule"), r("style_rule")]))))),
+  ("style_rule", wrap("style_rule", seq([field("name", wrap("selector_list", comma(r("selector")))), r("style_block")]))),
+  ("selector", seq([opt(r("combinator")), rep1(r("simple_selector")), rep(seq([r("combinator"), rep1(r("simple_selector"))]))])),
+  ("combinator", alt([lits([">", "+", "~"]), seq([lit("|"), lit("|")])])),
+  ("simple_selector", alt([
+    seq([lit("."), ident]), seq([lit("#"), ident]),
+    seq([lit(":"), opt(lit(":")), ident, opt(r("paren_values"))]),
+    r("attribute"), lit("&"),
+    seq([opt(seq([alt([ident, lit("*")]), lit("|")])), alt([ident, lit("*")])]),
+    // Percentages and from/to are the keyframe selector vocabulary.
+    tok("number")
+  ])),
+  ("attribute", wrap("attribute_selector", seq([lit("["), opt(seq([alt([ident, lit("*")]), lit("|")])), ident, opt(seq([opt(lits(["~", "|", "^", "$", "*"])), lit("="), alt([ident, tok("string")]), opt(ident)])), lit("]")]))),
+  ("style_block", wrap("block", seq([lit("{"), rep(alt([lit(";"), r("at_rule"), r("style_rule"), r("declaration")])), lit("}")]))),
+  ("declaration", wrap("declaration", seq([field("name", ident), lit(":"), rep(r("value")), alt([lit(";"), ahead(lit("}"))])]))),
+  ("at_rule", wrap("at_rule", seq([field("name", wrap("at_keyword", seq([lit("@"), ident]))), rep(r("prelude_value")), alt([lit(";"), r("style_block")])]))),
+  // Block contents are grammatical, balanced component values. A raw closing
+  // delimiter can never pass a component rule. Strings are already atomic.
+  ("value", alt([r("paren_values"), r("bracket_values"), r("brace_values"), r("value_token")])),
+  ("prelude_value", alt([r("paren_values"), r("bracket_values"), r("value_token")])),
+  ("paren_values", wrap("function_or_group", seq([lit("("), rep(r("component")), lit(")")]))),
+  ("bracket_values", wrap("bracket_value", seq([lit("["), rep(r("component")), lit("]")]))),
+  ("brace_values", wrap("block_value", seq([lit("{"), rep(r("component")), lit("}")]))),
+  ("component", alt([r("value"), keep(";")])),
+  ("value_token", seq([nott(lits(["(", ")", "[", "]", "{", "}", ";"])), alt([ident, tok("string"), tok("number"), tok("punct")])]))
+])
+fn parse_src(source: String) -> Result[parser.Parsed, String] = {
+  let ts = lexer.scan(source, false) |> result.map_err((e) => e.message)!
+  parser.parse(rules(), bytes.from_string(source), ts) |> result.map_err((e) => parser.format_failure(e))
+}
+test "CSS selectors at rules functions and keyframes" {
+  for src in ["<!-- .legacy {color:red} -->", ".card:hover, main > [data-x=\"yes\"] { color: rgb(1 2 3 / .5); --gap: 1rem; width: calc(100% - var(--gap)); }", "@media (width > 30rem) { .grid { display: grid; } } @keyframes fade { from { opacity: 0; } 100% { opacity: 1; } }", "@font-face { font-family: demo; src: url(\"a.woff2\") format(\"woff2\"); }"] { assert(result.is_ok(parse_src(src))) }
+}
+test "CSS structural errors fail strict parse" {
+  for src in [".a > { color: red; }", ".a { color red; }", ".a { color: rgb(1, 2; }", ".a { color: red;", "@media (wide { .a {} }", ".a, {color: red}"] { assert(result.is_err(parse_src(src))) }
+}

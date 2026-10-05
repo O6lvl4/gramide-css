@@ -1,0 +1,9 @@
+.button {
+  color: black;
+  &:hover { color: rebeccapurple; }
+  > .icon { transform: translate(1px, 2px); }
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+svg|a[href^="https"] { fill: currentColor; }
