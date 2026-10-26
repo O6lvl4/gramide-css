@@ -1,7 +1,7 @@
 // CSS Syntax Level 3-inspired UTF-8 byte scanner. No source rewriting.
 import gramide.tree
 import gramide.lex
-fn at(s: Bytes, i: Int) -> Int = bytes.get_or(s, i, -1)
+fn at(s: Bytes, i: Int) -> Int = bytes.get(s, i) ?? -1
 fn digit(b: Int) -> Bool = b >= 48 and b <= 57
 fn hex(b: Int) -> Bool = digit(b) or (b >= 65 and b <= 70) or (b >= 97 and b <= 102)
 fn alpha(b: Int) -> Bool = b == 95 or b >= 128 or (b >= 65 and b <= 90) or (b >= 97 and b <= 122)
